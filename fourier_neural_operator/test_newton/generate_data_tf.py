@@ -210,7 +210,6 @@ class NewtonData(gr.GridUp_dataMaker):
         return X,Y
 
 
-
     def plot_data(self,X,Y):
         f_nor=X[:, :, 0]
         f = f_nor*self.normalisation_for_f
@@ -232,41 +231,80 @@ class NewtonData(gr.GridUp_dataMaker):
         fig.tight_layout()
 
 
+    # noinspection PyUnboundLocalVariable
+    def losses_fn(self, X, Y, Y_pred, keys):
+        U = Y[:, :, 0]
+        U_pred = Y_pred[:, :, 0]
+        alpha = X[:, :, 1]
+        result = {}
+
+        if "D" in keys or "diffusion" in keys or "residues" in keys:
+            Dm, Dp = self.first_order_derivative(U)
+            Dm_pred, Dp_pred = self.first_order_derivative(U_pred)
+
+        if "diffusion" in keys or "residues" in keys:
+            diff = self.diffusion(Dm, Dp)
+            diff_pred = self.diffusion(Dm_pred, Dp_pred)
+
+        if "residues" in keys:
+            f = X[:, :, 0]*self.normalisation_for_f
+            reac_pred = alpha * U_pred
+            residues_pred = diff_pred + reac_pred - f
+
+        if "U" in keys:
+            diff=U - U_pred
+            result["U"] = mse(diff)+mse(alpha*diff)
+        if "D" in keys:
+            result["D"] = (mse(Dm - Dm_pred) + mse(Dp - Dp_pred))/self.mesh.N
+        if "diffusion" in keys:
+            result["diffusion"] = mse(diff - diff_pred)/self.mesh.N**2
+        if "residues" in keys:
+            result["residues"] = mse(residues_pred)/self.mesh.N**2
+
+        return result
+
+
 def mse(a):
     return tf.reduce_mean(tf.square(a))
 
 
-# noinspection PyUnboundLocalVariable
-def losses_fn(X, Y, Y_pred, data_maker: NewtonData, keys):
-    U=Y[:,0]
-    U_pred=Y_pred[:,0]
-    result={}
 
-    if "D" in keys or "diffusion" in keys or "residues" in keys:
-        Dm, Dp = data_maker.first_order_derivative(U)
-        Dm_pred, Dp_pred = data_maker.first_order_derivative(U_pred)
 
-    if "diffusion" in keys or "residues" in keys:
-        diff = data_maker.diffusion(Dm, Dp)
-        diff_pred = data_maker.diffusion(Dm_pred, Dp_pred)
 
-    if "residues" in keys:
-        f = X[:, 0]
-        alpha = X[:, 0]
-        reac_pred = alpha * U_pred
-        # noinspection PyUnboundLocalVariable
-        residues_pred = diff_pred + reac_pred - f
+def test_losses():
+    name_of_losses = ["U", "D", "diffusion", "residues"]
 
-    if "U" in keys:
-        result["U"]=mse(Y - Y_pred)
-    if "D" in keys:
-        result["D"]=mse(Dm - Dm_pred)+mse(Dp - Dp_pred)
-    if "diffusion" in keys:
-        result["diffusion"] = mse(diff - diff_pred)
-    if "residues" in keys:
-        result["residues"] = mse(residues_pred)
+    agent= AgentNewton(
+        name_of_losses=name_of_losses,
+        modes=20,
+        width=20,
+        nb_layer=4,
+        first_channel_unchanged=True,
+        freq_mix_size=5,
+        pad_prop=0,
+        pad_kind="no_padding",
+        batch_size=64,
+        only_one_optimizer=True,
+        lr=1e-3
+    )
+    model=agent.get_model()
+    data=NewtonData(a=0,b=1,N=100,k=lambda u: u ** 4 + 1.0,kind="gauss",BC="dirichlet")
 
-    return result
+    X,Y=data.make_XY(100)
+    Y=tf.random.uniform(Y.shape)
+    Y_pred=tf.random.uniform(Y.shape)
+
+    Dm,Dp=data.first_order_derivative(tf.random.uniform([1,10]))
+    print(Dm)
+    print(Dp)
+
+    losses=data.losses_fn(X,Y,Y_pred,name_of_losses)
+    print("losses",losses)
+
+
+
+
+
 
 
 
@@ -307,7 +345,7 @@ class AgentNewton(gr.GridUp_agent):
         X,Y=data_maker.make_XY(self.batch_size)
         with tf.GradientTape(persistent=True) as tape:
             Y_pred=self.model.call(X)
-            losses=losses_fn(X,Y,Y_pred,data_maker,self.name_of_losses)
+            losses=data_maker.losses_fn(X,Y,Y_pred,self.name_of_losses)
             loss=sum([loss_val for loss_val in losses.values()])
 
         tv=self.model.trainable_variables
@@ -325,8 +363,6 @@ class AgentNewton(gr.GridUp_agent):
     def train_step(self, data_maker: NewtonData):
         loss, _=self.train_step_with_details(data_maker)
         return loss
-
-
 
 
 
@@ -374,23 +410,31 @@ def test_agent():
 
     losses_hist = {name: [] for name in name_of_losses}
 
-    for i in range(100):
+    for i in range(10):
         loss, losses = agent.train_step_with_details(data)
         for name in name_of_losses:
             losses_hist[name].append(losses[name])
-        if i % 50 == 0:
+        if i % 10 == 0:
             print(loss)
 
+    print(losses_hist["diffusion"])
+    print(name_of_losses)
+
     for name in name_of_losses:
-        plt.plot(losses_hist[name],label=name)
-        
+        style="-"
+        if name=="diffusion":
+            style="+"
+        plt.plot(losses_hist[name],style,label=name)
+
+    plt.yscale("log")
     plt.legend()
-    plt.plot()
+    plt.show()
 
 
 
 
 if __name__=="__main__":
+    #test_losses()
     test_agent()
 
 
