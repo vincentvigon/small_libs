@@ -235,45 +235,45 @@ class NewtonData(gr.GridUp_dataMaker):
 def mse(a):
     return tf.reduce_mean(tf.square(a))
 
-def losses_fn(X, Y, Y_pred, data_maker: NewtonData, order):
+
+# noinspection PyUnboundLocalVariable
+def losses_fn(X, Y, Y_pred, data_maker: NewtonData, keys):
     U=Y[:,0]
     U_pred=Y_pred[:,0]
-    result = {"U": mse(Y - Y_pred)}
-    if order >= 1:
+    result={}
+
+    if "D" in keys or "diffusion" in keys or "residues" in "keys":
         Dm, Dp = data_maker.first_order_derivative(U)
         Dm_pred, Dp_pred = data_maker.first_order_derivative(U_pred)
-        result["Dm"] = mse(Dm - Dm_pred)
-        result["Dp"] = mse(Dp - Dp_pred)
-    if order >= 2:
-        # noinspection PyUnboundLocalVariable
+
+    if "diffusion" in keys or "residues" in "keys":
         diff = data_maker.diffusion(Dm, Dp)
-        # noinspection PyUnboundLocalVariable
         diff_pred = data_maker.diffusion(Dm_pred, Dp_pred)
-        result["diffusion"] = mse(diff - diff_pred)
-    if order == 3:
+
+    if "residues" in "keys":
         f = X[:, 0]
         alpha = X[:, 0]
         reac_pred = alpha * U_pred
         # noinspection PyUnboundLocalVariable
         residues_pred = diff_pred + reac_pred - f
+
+    if "U" in keys:
+        result["U"]=mse(Y - Y_pred)
+    if "D" in keys:
+        result["D"]=mse(Dm - Dm_pred)+mse(Dp - Dp_pred)
+    if "diffusion" in keys:
+        result["diffusion"] = mse(diff - diff_pred)
+    if "residues" in keys:
         result["residues"] = mse(residues_pred)
+
     return result
-def names_of_losses(order):
-    res=["U"]
-    if order >= 1:
-        res+=["Dm","Dp"]
-    if order >= 2:
-        res+=["diffusion"]
-    if order == 3:
-        res+=["residues"]
-    return res
 
 
 
 class AgentNewton(gr.GridUp_agent):
 
     def __init__(self,
-            order,
+            name_of_losses,
             modes,
             width,
             nb_layer,
@@ -286,29 +286,28 @@ class AgentNewton(gr.GridUp_agent):
             lr
     ):
 
-        self.order=order
         self.model = fno.FNO1d_plus(modes, width,1,nb_layer,first_channel_unchanged,freq_mix_size,pad_prop,pad_kind)
         self.optimizer = tf.keras.optimizers.Adam()
         self.batch_size = batch_size
         self.only_one_optimizer=only_one_optimizer
-
-        self.name_of_losses=names_of_losses(order)
+        self.name_of_losses=name_of_losses
 
         if only_one_optimizer:
             self.optimizers=tf.keras.optimizers.Adam(lr)
         else:
             self.optimizers={name:tf.keras.optimizers.Adam(lr) for name in self.name_of_losses}
 
+
     def get_model(self):
         return self.model
 
 
     @tf.function
-    def train_step(self, data_maker: NewtonData):
+    def train_step_with_details(self, data_maker: NewtonData):
         X,Y=data_maker.make_XY(self.batch_size)
         with tf.GradientTape(persistent=True) as tape:
             Y_pred=self.model.call(X)
-            losses=losses_fn(X,Y,Y_pred,data_maker,self.order)
+            losses=losses_fn(X,Y,Y_pred,data_maker,self.name_of_losses)
             loss=sum([loss_val for loss_val in losses.values()])
 
         tv=self.model.trainable_variables
@@ -321,7 +320,13 @@ class AgentNewton(gr.GridUp_agent):
                 self.optimizers[key].apply_gradients(zip(grad,tv))
 
         del tape
+        return loss,losses
+
+    def train_step(self, data_maker: NewtonData):
+        loss, _=self.train_step_with_details(data_maker)
         return loss
+
+
 
 
 
@@ -351,7 +356,7 @@ def test_data():
 def test_agent():
 
     agent= AgentNewton(
-        order=1,
+        name_of_losses=["U","D"],
         modes=20,
         width=20,
         nb_layer=4,
