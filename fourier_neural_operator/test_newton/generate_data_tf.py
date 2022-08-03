@@ -43,13 +43,13 @@ class NewtonData(gr.GridUp_dataMaker):
         tf.random.set_seed(123)
         X,Y=self.make_XY(nb)
         Y_pred=model(X)
-        i=custom_arg['i']
+        i=custom_arg.get('i',0)
         U=Y[:,:,0]
         U_pred = Y_pred[:, :, 0]
-        if custom_arg["U"]:
+        if custom_arg.get("U",False):
             ax.plot(U[i],label="U true")
             ax.plot(U_pred[i],label="U pred")
-        elif custom_arg["residues"]:
+        elif custom_arg.get("residues",False):
             residues=self.G2(X,Y)
             residues_pred=self.G2(X,Y_pred)
             ax.plot(residues[i], label="residues true")
