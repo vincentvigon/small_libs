@@ -334,6 +334,7 @@ class AgentNewton(gr.GridUp_agent):
     @tf.function
     def train_step_with_details(self, data_maker: NewtonData):
         X,Y=data_maker.make_XY(self.batch_size)
+        X=self.augment(X)
         with tf.GradientTape(persistent=True) as tape:
             Y_pred=self.model.call(X)
             losses=data_maker.losses_fn(X,Y,Y_pred,self.name_of_losses,coef_for_derivative=0.01)
