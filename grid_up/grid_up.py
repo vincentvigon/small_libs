@@ -1,8 +1,5 @@
-from fourier_neural_operator.FNO_1d_plus import FNO1d_plus
-from paddings.paddings import pad_nd, kind_dict
-import time
 
-from paddings.paddings_right import pad_nd_right
+import time
 pp=print
 import numpy as np
 import tensorflow as tf
@@ -20,12 +17,11 @@ class GridUp_dataMaker(ABC):
         pass
 
     @abstractmethod
-    def plot_prediction(self,ax,model:tf.keras.Model,custom_arg=None)->None:
+    def plot_prediction(self,ax,agent:'GridUp_agent',custom_arg=None)->None:
         pass
 
-
     @abstractmethod
-    def score(self, model) -> dict:
+    def score(self, agent:'GridUp_agent') -> dict:
         # evaluate at test time, with a trained model
         pass
 
@@ -33,12 +29,20 @@ class GridUp_dataMaker(ABC):
 
 class GridUp_agent(ABC):
     @abstractmethod
-    def get_model(self):
+    def call_model(self,X)->tf.Tensor:
+        pass
+
+    @abstractmethod
+    def get_weights(self) -> List[tf.Tensor]:
+        pass
+    @abstractmethod
+    def set_weights(self,weights:List[tf.Tensor])->None:
         pass
 
     @abstractmethod
     def train_step(self,dataMaker:GridUp_dataMaker)->tf.Tensor:
         pass
+
 
 
 class GridUp:
@@ -58,7 +62,6 @@ class GridUp:
         self.varying_params=varying_params
         self.verbose=verbose
         self.minutes=minutes
-
         self.ClassAgent=ClassAgent
 
 
@@ -73,9 +76,8 @@ class GridUp:
         #tout ça pour récupérer le nom des scores :-)
         # noinspection PyArgumentList
         agent_bidon=self.ClassAgent(**self.fixed_params)
-        model_bidon=agent_bidon.get_model()
         data_maker_bidon=list(self.data_creators_test_dict.values())[0]
-        score_bidon=data_maker_bidon.score(model_bidon)
+        score_bidon=data_maker_bidon.score(agent_bidon)
         self.score_names=list(score_bidon.keys())
 
 
@@ -88,8 +90,8 @@ class GridUp:
                 print(f"key={paramName}, paramVal={paramVal}")
 
             all_params[paramName]=paramVal
-            scoreName_case_val,model=self.train_and_test(all_params)
-            self.last_models[paramVal]=model
+            scoreName_case_val,agent=self.train_and_test(all_params)
+            self.last_models[paramVal]=agent
 
             if self.verbose:
                 print("scoreName_case_val:\n",scoreName_case_val)
@@ -188,7 +190,7 @@ class GridUp:
 
                 if mean_loss<best_loss:
                     best_loss=mean_loss
-                    best_weights=agent.get_model().get_weights()
+                    best_weights=agent.get_weights()
                     if self.verbose:
                         print(f"↘{best_loss:.1e}",end="")
 
@@ -198,12 +200,10 @@ class GridUp:
         if self.verbose:
             print(f"\n nb epochs:{count} during {self.minutes} minutes")
 
-        model=agent.get_model()
         if best_weights is not None:
-            model.set_weights(best_weights)
+            agent.set_weights(best_weights)
 
-        return self.test(model),model
-
+        return self.test(agent),agent
 
 
     def test(self,model):
@@ -334,9 +334,9 @@ class DataCreator_num(GridUp_dataMaker):
     def __init__(self,nu):
         self.nu=nu
 
-    def plot_prediction(self,ax,model,custom_arg=None):
+    def plot_prediction(self,ax,agent:'SimpleAgent',custom_arg=None):
         X,Y=self.make_XY(500)
-        Y_pred=model(X)
+        Y_pred=agent.call_model(X)
         if custom_arg["plot_true"]:
             ax.plot(X[:,0],Y[:,0],".",label="true")
         if custom_arg["plot_pred"]:
@@ -350,25 +350,31 @@ class DataCreator_num(GridUp_dataMaker):
         Y=tf.sin(x*self.nu)
         return X,Y
 
-    def score(self, model) -> dict:
+
+    def score(self, agent:'SimpleAgent') -> dict:
         X,Y=self.make_XY(1000)
-        Y_pred=model(X)
+        Y_pred=agent.call_model(X)
         return {
             "mae":tf.reduce_mean(tf.abs(Y-Y_pred)).numpy(),
             "mse": tf.reduce_mean(tf.square(Y - Y_pred)).numpy(),
         }
 
 
-
 class SimpleAgent(GridUp_agent):
+
+    def get_weights(self) -> List[tf.Tensor]:
+        return self.model.get_weights()
+
+    def set_weights(self, weights:List[tf.Tensor]) -> None:
+        self.model.set_weights(weights)
 
     def __init__(self, width, nb_layers, lr, batch_size):
         self.model = SimpleModel(width, nb_layers, 1)
         self.optimizer = tf.keras.optimizers.Adam(lr)
         self.batch_size = batch_size
 
-    def get_model(self):
-        return self.model
+    def call_model(self,X):
+        return self.model.call(X)
 
     @tf.function
     def train_step(self, data_maker: GridUp_dataMaker):

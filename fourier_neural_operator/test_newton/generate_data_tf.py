@@ -1,3 +1,5 @@
+from typing import List
+
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
@@ -21,17 +23,16 @@ class Mesh:
 
 class NewtonData(gr.GridUp_dataMaker):
 
-
-    def score(self, model) -> dict:
+    def score(self, agent:'AgentNewton') -> dict:
         X,Y=self.make_XY(1024)
-        Y_pred=model(X)
+        Y_pred=agent.call_model(X)
         return self.losses_fn(X,Y,Y_pred,["U","D","diffusion","residues"],coef_for_derivative=1.)
 
-    def plot_prediction(self, ax, model: tf.keras.Model,custom_arg=None) -> None:
+    def plot_prediction(self, ax, agent:'AgentNewton',custom_arg=None) -> None:
         nb=10
         tf.random.set_seed(123)
         X,Y=self.make_XY(nb)
-        Y_pred=model(X)
+        Y_pred=agent.call_model(X)
         i=custom_arg.get('i',0)
         U=Y[:,:,0]
         U_pred = Y_pred[:, :, 0]
@@ -267,38 +268,16 @@ def mse(a):
 
 
 
-def test_losses():
-    name_of_losses = ["U", "D", "diffusion", "residues"]
-
-    agent= AgentNewton(
-        name_of_losses=name_of_losses,
-        modes=20,
-        width=20,
-        nb_layer=4,
-        first_channel_unchanged=True,
-        freq_mix_size=5,
-        pad_prop=0,
-        pad_kind="no_padding",
-        batch_size=64,
-        only_one_optimizer=True,
-        lr=1e-3
-    )
-    model=agent.get_model()
-    data=NewtonData(a=0,b=1,N=100,k=lambda u: u ** 4 + 1.0,kind="gauss",BC="dirichlet")
-
-    X,Y=data.make_XY(100)
-    Y=tf.random.uniform(Y.shape)
-    Y_pred=tf.random.uniform(Y.shape)
-
-    Dm,Dp=data.first_order_derivative(tf.random.uniform([1,10]))
-    print(Dm)
-    print(Dp)
-
-    losses=data.losses_fn(X,Y,Y_pred,name_of_losses,coef_for_derivative=0.01)
-    print("losses",losses)
-
 
 class AgentNewton(gr.GridUp_agent):
+
+
+    def get_weights(self) -> List[tf.Tensor]:
+        return self.model.get_weights()
+
+    def set_weights(self, weights: List[tf.Tensor]) -> None:
+        self.model.set_weights(weights)
+
 
     def __init__(self,
             name_of_losses,
@@ -311,7 +290,8 @@ class AgentNewton(gr.GridUp_agent):
             pad_kind,
             batch_size,
             only_one_optimizer,
-            lr
+            lr,
+            augmentation_level
     ):
 
         self.model = fno.FNO1d_plus(modes, width,1,nb_layer,first_channel_unchanged,freq_mix_size,pad_prop,pad_kind)
@@ -319,6 +299,7 @@ class AgentNewton(gr.GridUp_agent):
         self.batch_size = batch_size
         self.only_one_optimizer=only_one_optimizer
         self.name_of_losses=name_of_losses
+        self.augmentation_level=augmentation_level
 
         if only_one_optimizer:
             self.optimizers=tf.keras.optimizers.Adam(lr)
@@ -326,8 +307,28 @@ class AgentNewton(gr.GridUp_agent):
             self.optimizers={name:tf.keras.optimizers.Adam(lr) for name in self.name_of_losses}
 
 
-    def get_model(self):
-        return self.model
+    def call_model(self,X):
+        X=self.augment(X)
+        return self.model.call(X)
+
+
+    def augment(self,X):
+        if self.augmentation_level==0:
+            return X
+        elif self.augmentation_level==1:
+            f_nor=X[:,:,0]
+            alpha=X[:,:,1]
+            ff=tf.cumsum(f_nor,axis=1)/100
+            return tf.stack([f_nor,alpha,ff],axis=2)
+
+        elif self.augmentation_level==2:
+            f_nor=X[:,:,0]
+            alpha=X[:,:,1]
+            ff=tf.cumsum(f_nor,axis=1)/100
+            fff = tf.cumsum(ff, axis=1) / 100
+            return tf.stack([f_nor,alpha,ff,fff],axis=2)
+        else:
+            raise Exception(f"augmentation level must be in [0,1,2], found:{self.augmentation_level}")
 
 
     @tf.function
@@ -393,11 +394,11 @@ def test_agent():
         pad_kind="no_padding",
         batch_size=64,
         only_one_optimizer=True,
-        lr=1e-3
+        lr=1e-3,
+        augmentation_level=1
     )
 
     data=NewtonData(a=0,b=1,N=100,k=lambda u: u ** 4 + 1.0,kind="gauss",BC="dirichlet")
-
     losses_hist = {name: [] for name in name_of_losses}
 
     for i in range(10):
