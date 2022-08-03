@@ -242,15 +242,15 @@ def losses_fn(X, Y, Y_pred, data_maker: NewtonData, keys):
     U_pred=Y_pred[:,0]
     result={}
 
-    if "D" in keys or "diffusion" in keys or "residues" in "keys":
+    if "D" in keys or "diffusion" in keys or "residues" in keys:
         Dm, Dp = data_maker.first_order_derivative(U)
         Dm_pred, Dp_pred = data_maker.first_order_derivative(U_pred)
 
-    if "diffusion" in keys or "residues" in "keys":
+    if "diffusion" in keys or "residues" in keys:
         diff = data_maker.diffusion(Dm, Dp)
         diff_pred = data_maker.diffusion(Dm_pred, Dp_pred)
 
-    if "residues" in "keys":
+    if "residues" in keys:
         f = X[:, 0]
         alpha = X[:, 0]
         reac_pred = alpha * U_pred
@@ -354,9 +354,10 @@ def test_data():
 
 
 def test_agent():
+    name_of_losses = ["U", "D", "diffusion", "residues"]
 
     agent= AgentNewton(
-        name_of_losses=["U","D"],
+        name_of_losses=name_of_losses,
         modes=20,
         width=20,
         nb_layer=4,
@@ -371,13 +372,21 @@ def test_agent():
 
     data=NewtonData(a=0,b=1,N=100,k=lambda u: u ** 4 + 1.0,kind="gauss",BC="dirichlet")
 
-    losses=[]
-    for _ in range(100):
-        loss=agent.train_step(data)
-        losses.append(loss)
+    losses_hist = {name: [] for name in name_of_losses}
 
-    plt.plot(losses)
-    plt.show()
+    for i in range(100):
+        loss, losses = agent.train_step_with_details(data)
+        for name in name_of_losses:
+            losses_hist[name].append(losses[name])
+        if i % 50 == 0:
+            print(loss)
+
+    for name in name_of_losses:
+        plt.plot(losses_hist[name],label=name)
+        
+    plt.legend()
+    plt.plot()
+
 
 
 
