@@ -269,6 +269,12 @@ def names_of_losses(order):
     return res
 
 
+import inspect
+def foo(a, b, x='blah'):
+    pass
+
+sign=inspect.signature(foo)
+
 
 class AgentNewton(gr.GridUp_agent):
 
