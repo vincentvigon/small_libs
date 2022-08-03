@@ -3,8 +3,8 @@ import numpy as np
 import tensorflow as tf
 import time
 import tensorflow_probability as tfp
-
-from grid_up.grid_up_old import GridUp_testable
+import grid_up.grid_up as gr
+import fourier_neural_operator.FNO_1d_plus as fno
 
 pp=print
 
@@ -30,10 +30,14 @@ class Mesh:
     self.L = self.b - self.a
 
 
-class NewtonData(GridUp_testable):  # à modifier /creation des jeux de données
+class NewtonData(gr.GridUp_dataMaker):  # à modifier /creation des jeux de données
+
+
+
 
     def loss(self, Y_true, Y_pred) -> tf.Tensor:
         return tf.reduce_mean(tf.square(Y_true-Y_pred))
+
 
     def score(self, model) -> dict or float:
         X,Y=self.generate_XY(1024)
@@ -199,7 +203,6 @@ class NewtonData(GridUp_testable):  # à modifier /creation des jeux de données
         t=self.mesh.m[None,None,:]
         res= a0 + an*tf.sin(t* nu)
         res=tf.reduce_sum(res,axis=0)
-
         return res
 
 
@@ -236,7 +239,7 @@ class NewtonData(GridUp_testable):  # à modifier /creation des jeux de données
 
 
     @tf.function
-    def generate_XY(self,batch_size):
+    def make_XY(self,batch_size):
         if self.verbose:
             print("traçage de la fonction generate_XY")
         """"""
@@ -275,6 +278,30 @@ class NewtonData(GridUp_testable):  # à modifier /creation des jeux de données
         ax[0, 2].set_title("U")
         ax[0, 3].set_title("G(U)")
         fig.tight_layout()
+
+
+
+class SimpleAgent(gr.GridUp_agent):
+
+    def __init__(self,modes, width,nb_layer,first_channel_unchanged,freq_mix_size,pad_prop,pad_kind):
+        self.model = fno.FNO1d_plus(modes, width,1,nb_layer,first_channel_unchanged,freq_mix_size,pad_prop,pad_kind)
+        self.optimizer = tf.keras.optimizers.Adam()
+        self.batch_size = 512
+
+    def get_model(self):
+        return self.model
+
+    @tf.function
+    def train_step(self, data_maker: gr.GridUp_dataMaker):
+        X,Y=data_maker.make_XY(self.batch_size)
+        with tf.GradientTape() as tape:
+            Y_pred=self.model.call(X)
+            loss=tf.reduce_mean(tf.square(Y-Y_pred))
+        tv=self.model.trainable_variables
+        grad=tape.gradient(loss,tv)
+        self.optimizer.apply_gradients(zip(grad,tv))
+        return loss
+
 
 
 def test():
