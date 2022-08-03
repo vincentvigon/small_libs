@@ -38,11 +38,22 @@ class NewtonData(gr.GridUp_dataMaker):
         Y_pred=model(X)
         return self.losses_fn(X,Y,Y_pred,["U","D","diffusion","residues"],coef_for_derivative=1.)
 
-    def plot_prediction(self, ax, model: tf.keras.Model) -> None:
-        X,Y=self.make_XY(1)
+    def plot_prediction(self, ax, model: tf.keras.Model,custom_arg=None) -> None:
+        nb=10
+        tf.random.set_seed(123)
+        X,Y=self.make_XY(nb)
         Y_pred=model(X)
-        ax.plot(Y[0,:,0],label="Y_true")
-        ax.plot(Y_pred[0,:,0],label="Y_pred")
+        i=custom_arg['i']
+        U=Y[:,:,0]
+        U_pred = Y_pred[:, :, 0]
+        if custom_arg["U"]:
+            ax.plot(U[i],label="U true")
+            ax.plot(U_pred[i],label="U pred")
+        elif custom_arg["residues"]:
+            residues=self.G2(X,Y)
+            residues_pred=self.G2(X,Y_pred)
+            ax.plot(residues[i], label="residues true")
+            ax.plot(residues_pred[i], label="residues pred")
 
 
     def __init__(self,
@@ -296,6 +307,7 @@ def test_losses():
 
     losses=data.losses_fn(X,Y,Y_pred,name_of_losses,coef_for_derivative=0.01)
     print("losses",losses)
+
 
 
 

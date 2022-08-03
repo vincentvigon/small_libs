@@ -20,7 +20,7 @@ class GridUp_dataMaker(ABC):
         pass
 
     @abstractmethod
-    def plot_prediction(self,ax,model:tf.keras.Model)->None:
+    def plot_prediction(self,ax,model:tf.keras.Model,custom_arg=None)->None:
         pass
 
 
@@ -103,13 +103,13 @@ class GridUp:
         return scoreName_paramVal_case_scoreVal
 
 
-    def plot_prediction(self,**subplots_kwargs):
+    def plot_prediction(self,custon_param=None):
 
         paramValues=self.varying_params[self.last_paramName]
 
         ni,nj=len(self.data_creators_test_dict),len(paramValues)
 
-        fig,axs=plt.subplots(ni,nj,figsize=(4*nj,2*ni),**subplots_kwargs)
+        fig,axs=plt.subplots(ni,nj,figsize=(4*nj,2*ni))
         if ni==1:
             axs=axs[None,:]
         elif nj==1:
@@ -121,7 +121,7 @@ class GridUp:
                 label_i+=" (trained)"
             for j,paramValue in enumerate(paramValues):
                 ax=axs[i,j]
-                data_creator.plot_prediction(ax,self.last_models[paramValue])
+                data_creator.plot_prediction(ax,self.last_models[paramValue],custon_param)
                 if j==0:
                      ax.set_ylabel(label_i)
                 if i==ni-1:
@@ -334,11 +334,13 @@ class DataCreator_num(GridUp_dataMaker):
     def __init__(self,nu):
         self.nu=nu
 
-    def plot_prediction(self,ax,model):
+    def plot_prediction(self,ax,model,custom_arg=None):
         X,Y=self.make_XY(500)
         Y_pred=model(X)
-        ax.plot(X[:,0],Y[:,0],".",label="true")
-        ax.plot(X[:,0],Y_pred[:,0],".",label="pred")
+        if custom_arg["plot_true"]:
+            ax.plot(X[:,0],Y[:,0],".",label="true")
+        if custom_arg["plot_pred"]:
+            ax.plot(X[:,0],Y_pred[:,0],".",label="pred")
 
     def make_XY(self, batch_size) -> tuple:
         x=tf.random.uniform([batch_size,1])
@@ -394,7 +396,7 @@ def test_numeric_cases():
         fixed_params={"width":10,"nb_layers":3,"lr":1e-3,"batch_size":64},
         #varying_params={"width":[5,10,20],"nb_layers":[1,2,3,4]},
         varying_params={"width": [5, 10], "nb_layers": [1, 2],"lr":[1e-2,1e-3,1e-4],"batch_size":[32,64,128,512]},
-        minutes=0.1,
+        minutes=0.01,
         verbose=True
     )
 
@@ -402,7 +404,7 @@ def test_numeric_cases():
     print(res)
     testor.plot_last_result(True)
     testor.plot_last_result(False)
-    fig,axs=testor.plot_prediction(sharex="all",sharey="all")
+    fig,axs=testor.plot_prediction({"plot_true":True,"plot_pred":True})
     fig.sharex="all"
 
     plt.show()
@@ -412,6 +414,7 @@ def test_numeric_cases():
     # testor.plot_last_result(True)
     # testor.plot_last_result(False)
 
+#todo: faire un test ou les values sont des listes. ça pose problème
 #
 # def test_string_cases():
 #
@@ -433,7 +436,15 @@ def test_numeric_cases():
 #     testor.plot_last_result(True)
 #     testor.plot_last_result(False)
 
+def test_kwargs():
+
+    def foo(*args,**kwargs):
+        print(kwargs)
+        print(args)
+
+    foo(4,5,a=14)
 
 if __name__=="__main__":
     test_numeric_cases()
     #test_string_cases()
+    #test_kwargs()
