@@ -269,12 +269,6 @@ def names_of_losses(order):
     return res
 
 
-import inspect
-def foo(a, b, x='blah'):
-    pass
-
-sign=inspect.signature(foo)
-
 
 class AgentNewton(gr.GridUp_agent):
 
@@ -312,11 +306,10 @@ class AgentNewton(gr.GridUp_agent):
     @tf.function
     def train_step(self, data_maker: NewtonData):
         X,Y=data_maker.make_XY(self.batch_size)
-        with tf.GradientTape() as tape:
+        with tf.GradientTape(persistent=True) as tape:
             Y_pred=self.model.call(X)
             losses=losses_fn(X,Y,Y_pred,data_maker,self.order)
-            if self.only_one_optimizer:
-                loss=sum([loss_val for loss_val in losses.values()])
+            loss=sum([loss_val for loss_val in losses.values()])
 
         tv=self.model.trainable_variables
         if self.only_one_optimizer:
@@ -326,11 +319,13 @@ class AgentNewton(gr.GridUp_agent):
             for key in self.name_of_losses:
                 grad=tape.gradient(losses[key],tv)
                 self.optimizers[key].apply_gradients(zip(grad,tv))
+
+        del tape
         return loss
 
 
 
-def test():
+def test_data():
     ku2 = lambda u: u ** 4 + 1.0  # non linéarité
     #kpu2 = lambda u: 4.0 * u * u * u
     newtonData = NewtonData(a=0.0, b=1.0, N=200,BC="dirichlet",kind="fourier",k=ku2,dtype=tf.float64)
@@ -353,9 +348,36 @@ def test():
     plt.show()
 
 
+def test_agent():
+
+    agent= AgentNewton(
+        order=1,
+        modes=20,
+        width=20,
+        nb_layer=4,
+        first_channel_unchanged=True,
+        freq_mix_size=5,
+        pad_prop=0,
+        pad_kind="no_padding",
+        batch_size=64,
+        only_one_optimizer=True,
+        lr=1e-3
+    )
+
+    data=NewtonData(a=0,b=1,N=100,k=lambda u: u ** 4 + 1.0,kind="gauss",BC="dirichlet")
+
+    losses=[]
+    for _ in range(100):
+        loss=agent.train_step(data)
+        losses.append(loss)
+
+    plt.plot(losses)
+    plt.show()
+
+
 
 if __name__=="__main__":
-    test()
+    test_agent()
 
 
 
