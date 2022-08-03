@@ -9,16 +9,6 @@ import fourier_neural_operator.FNO_1d_plus as fno
 pp=print
 
 
-
-def linspace(a,b,N,dtype):
-    if dtype==tf.float32:
-        return tf.linspace(a,b,N)
-    elif dtype==tf.float64:
-        return tf.constant(np.linspace(a,b,N))
-    else:
-        raise Exception("only for tf.float32 or tf.float64")
-
-
 class Mesh:
   def __init__(self, N, a, b,dtype):
     self.N = N
@@ -28,7 +18,6 @@ class Mesh:
     self.h= tf.abs(self.m[1]-self.m[0])
     self.mid = (self.a + self.b) / 2
     self.L = self.b - self.a
-
 
 class NewtonData(gr.GridUp_dataMaker):
 
@@ -307,11 +296,6 @@ def test_losses():
 
     losses=data.losses_fn(X,Y,Y_pred,name_of_losses,coef_for_derivative=0.01)
     print("losses",losses)
-
-
-
-
-
 
 
 class AgentNewton(gr.GridUp_agent):
