@@ -178,23 +178,21 @@ class SpectralConv1d_plus(tf.keras.layers.Layer):
         return x
 
 
-print("toto")
 class FNO1d_plus(tf.keras.Model):
 
     def __init__(self, modes:int, width:int,out_channels:int,nb_layer=4,first_channel_unchanged=False,freq_mix_size=0,pad_prop=0.1,pad_kind="zero_padding",verbose=False):
         """
-        @param modes: number of fourier coef keept
-        @param width:
-        @param out_channels:
-        @param nb_layer:
-        @param first_channel_unchanged:
-        @param freq_mix_size:
-        @param pad_prop:
-        @param pad_kind:
-        @param verbose:
+        @param modes:int, number of fourier coef keept
+        @param width:int, nb_channels of hidden layers
+        @param out_channels:int, dimension of output
+        @param nb_layer:int,
+        @param first_channel_unchanged:bool, if True, at the beginning of the training, the first channel of each hidden layer is simply the spectrum
+        @param freq_mix_size:int, size of the convolutionnal kernel applyiend the frequency layers
+        @param pad_prop:float, the padding is int(pad_prof*signal_size) at each border
+        @param pad_kind:string, kind of padding. Eg: neumann_padding, smooth_padding,zero_padding
+        @param verbose:bool, if True, more message are printed
         """
         super().__init__()
-
 
         self.modes = modes
         self.width = width
