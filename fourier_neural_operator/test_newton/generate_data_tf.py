@@ -30,23 +30,18 @@ class Mesh:
     self.L = self.b - self.a
 
 
-class NewtonData(gr.GridUp_dataMaker):  # à modifier /creation des jeux de données
+class NewtonData(gr.GridUp_dataMaker):
 
-
-
-
-    def loss(self, Y_true, Y_pred) -> tf.Tensor:
-        return tf.reduce_mean(tf.square(Y_true-Y_pred))
 
 
     def score(self, model) -> dict or float:
-        X,Y=self.generate_XY(1024)
+        X,Y=self.make_XY(1024)
         Y_pred=model(X)
         residues=self.G2(X,Y_pred)
         return {"residue/N^2":tf.reduce_mean(tf.abs(residues)/self.mesh.N**2)}
 
     def plot_prediction(self, ax, model: tf.keras.Model) -> None:
-        X,Y=self.generate_XY(1)
+        X,Y=self.make_XY(1)
         Y_pred=model(X)
         ax.plot(Y[0,:,0],label="Y_true")
         ax.plot(Y_pred[0,:,0],label="Y_pred")
@@ -80,96 +75,49 @@ class NewtonData(gr.GridUp_dataMaker):  # à modifier /creation des jeux de donn
         self.normalisation_for_f=1000.
 
 
-    def elliptic(self, U,alpha):
-        if self.BC == "dirichlet":
-            return self.elliptic_dirichlet_periodic(U,alpha,True)
-        elif self.BC=="periodic":
-            return self.elliptic_dirichlet_periodic(U,alpha,False)
-        elif self.BC=="neumann":
-            return self.elliptic_neumann(U,alpha)
-        else:
-            raise Exception(f"must be 'dirichlet', 'neumann' or 'periodic', found:{self.BC}")
-
-
-    def elliptic_neumann(self, U,alpha):
-        """
-        alpha U + nabla(k(U) nabla(U))
-        ex: k(U) = 1 + U^4
-        calculé en différence finie, condition de bord de Neumann
-        """
-
-        h = self.mesh.h # (N)
-
-        # Attention: le roll qui peut cacher des erreurs. Je préférerais supprimer les valeurs de bord que les enrouler
-        Up = tf.roll(U,-1,axis=1)  #   (N)  Up = U_i+1
-        Um = tf.roll(U, 1,axis=1)  #   (N)   Um = U_i-1
-
-        # diffusion terms
-        Kp = 0.5 * (self.k(U) + self.k(Up))
-        Km = 0.5 * (self.k(Um) + self.k(U))
-
-        diff = - (Kp * (Up - U) - Km * (U - Um)) / h ** 2
-
-        #todo: ici j'ai changé, les conditions de neumann me semblaients bizarre
-        diff_0 = - (Kp[:,0] * (U[:,1] - U[:,0])) / h   + U[:,0]   # - Km * (U - Um) = uL neumann on left boundary
-        diff_0=diff_0[:,None]
-        diff_last = - ( - Km[:,-1] * (U[:,-1] - U[:,-2]) ) / h  + U[:,-1]  # - Kp * (Up - U) = uR neumann on right boundary
-        diff_last=diff_last[:,None]
-
-        diff=tf.concat([diff_0,diff[:,1:-1],diff_last],axis=1)
-
+    def elliptic(self,U,alpha):
         # reaction term
         reac = alpha * U
+        Dm, Dp=self.first_order_derivative(U)
+        diffusion = self.diffusion(Dm,Dp)
+        return diffusion+reac
 
-        return reac + diff
 
+    def diffusion(self,Dm,Dp):
+        return (Dm - Dp) / self.mesh.h
 
-    def elliptic_dirichlet_periodic(self, U,alpha,is_dirichlet):
+    def first_order_derivative(self, U):
+        """
+                On calcule le second membre de l'EDP:
+                    alpha U + nabla(k(U) nabla(U))
+                avec par exemple: k(U) = 1 + U^4
+
+                calculé en différence finie,
+        """
 
         h = self.mesh.h  # (N)
 
         Um = U[:,:-1]  # (N)   Um = U_i-1
         Up = U[:,1:]  # (N)  Up = U_i+1
 
-        if is_dirichlet:
+        if self.BC == "dirichlet":
             Um = tf.concat([U[:, :1 ], Um], axis=1)
             Up = tf.concat( [Up,U[:, -1:]], axis=1)
-        else:
+
+        elif self.BC == "periodic":
             Um = tf.concat([U[:, -1:], Um], axis=1)
             Up = tf.concat([Up, U[:, :1]], axis=1)
+        else:
+            raise Exception(f"must be 'dirichlet' or 'periodic': 'neumann' will come soon, found:{self.BC}")
 
         # diffusion terms
         Kp = 0.5 * (self.k(U) + self.k(Up))
         Km = 0.5 * (self.k(Um) + self.k(U))
-        diff = - (Kp * (Up - U) - Km * (U - Um)) / h ** 2
 
-        # reaction term
-        reac = alpha * U
+        Dp=Kp * (Up - U)/h
+        Dm=Km * (U - Um)/h
 
-        return reac+diff
-
-
-    def elliptic_suggestion(self, U,alpha_loc):
-        """
-        On pourrait ne mettre aucune condition au limite, en raccoursissant le signal de chaque côté,
-        si on ne doit appliquer l'opérateur qu'une seule fois ...
-        """
-        # reaction term
-        h = self.mesh.h # (N)
-
-        Up = U[:,2:]      #  Up = U_i+1
-        Um = U[:,:-2]     #  Um = U_i-1
-        Uc = U[:,1:-1]    #  Uc = U_i
-
-        # diffusion terms
-        Kp = 0.5 * (self.k(Uc) + self.k(Up))
-        Km = 0.5 * (self.k(Um) + self.k(Uc))
-
-        diff = - (Kp * (Up - Uc) - Km * (Uc - Um)) / h ** 2
-
-        reac = alpha_loc * Uc
-
-        return reac + diff
+        return Dm,Dp
 
     def get_G_for_scipy(self,f,alpha):
         return lambda U:self.G(U,f,alpha)
@@ -205,8 +153,6 @@ class NewtonData(gr.GridUp_dataMaker):  # à modifier /creation des jeux de donn
         res=tf.reduce_sum(res,axis=0)
         return res
 
-
-
     def generate_gaussian_mix(self,nb_data):
 
         nb_gauss_max=6
@@ -228,7 +174,6 @@ class NewtonData(gr.GridUp_dataMaker):  # à modifier /creation des jeux de donn
 
         return res
 
-
     def generate_alpha(self,nb_data):
         if self.kind=="gauss":
             return self.generate_gaussian_mix(nb_data)
@@ -244,11 +189,18 @@ class NewtonData(gr.GridUp_dataMaker):  # à modifier /creation des jeux de donn
             print("traçage de la fonction generate_XY")
         """"""
         """
-        On génére 
+        On triche: on génére 
           u,alpha
         On en déduit le second membre
           f 
-        qui permet d'avoir un résidu nul
+        qui permet d'avoir un résidu proche de zéro
+        
+        Mais le réseau de neurone devrai retrouver: 
+          Y=[u]
+        à partir de
+          X=[f,alpha]
+        
+        
         """
         alpha = self.generate_alpha(batch_size)
         U = self.generate_alpha(batch_size)
@@ -280,26 +232,94 @@ class NewtonData(gr.GridUp_dataMaker):  # à modifier /creation des jeux de donn
         fig.tight_layout()
 
 
+def mse(a):
+    return tf.reduce_mean(tf.square(a))
 
-class SimpleAgent(gr.GridUp_agent):
+def losses_fn(X, Y, Y_pred, data_maker: NewtonData, order):
+    U=Y[:,0]
+    U_pred=Y_pred[:,0]
+    result = {"U": mse(Y - Y_pred)}
+    if order >= 1:
+        Dm, Dp = data_maker.first_order_derivative(U)
+        Dm_pred, Dp_pred = data_maker.first_order_derivative(U_pred)
+        result["Dm"] = mse(Dm - Dm_pred)
+        result["Dp"] = mse(Dp - Dp_pred)
+    if order >= 2:
+        # noinspection PyUnboundLocalVariable
+        diff = data_maker.diffusion(Dm, Dp)
+        # noinspection PyUnboundLocalVariable
+        diff_pred = data_maker.diffusion(Dm_pred, Dp_pred)
+        result["diffusion"] = mse(diff - diff_pred)
+    if order == 3:
+        f = X[:, 0]
+        alpha = X[:, 0]
+        reac_pred = alpha * U_pred
+        # noinspection PyUnboundLocalVariable
+        residues_pred = diff_pred + reac_pred - f
+        result["residues"] = mse(residues_pred)
+    return result
+def names_of_losses(order):
+    res=["U"]
+    if order >= 1:
+        res+=["Dm","Dp"]
+    if order >= 2:
+        res+=["diffusion"]
+    if order == 3:
+        res+=["residues"]
+    return res
 
-    def __init__(self,modes, width,nb_layer,first_channel_unchanged,freq_mix_size,pad_prop,pad_kind):
+
+
+class AgentNewton(gr.GridUp_agent):
+
+    def __init__(self,
+            order,
+            modes,
+            width,
+            nb_layer,
+            first_channel_unchanged,
+            freq_mix_size,
+            pad_prop,
+            pad_kind,
+            batch_size,
+            only_one_optimizer,
+            lr
+    ):
+
+        self.order=order
         self.model = fno.FNO1d_plus(modes, width,1,nb_layer,first_channel_unchanged,freq_mix_size,pad_prop,pad_kind)
         self.optimizer = tf.keras.optimizers.Adam()
-        self.batch_size = 512
+        self.batch_size = batch_size
+        self.only_one_optimizer=only_one_optimizer
+
+        self.name_of_losses=names_of_losses(order)
+
+        if only_one_optimizer:
+            self.optimizers=tf.keras.optimizers.Adam(lr)
+        else:
+            self.optimizers={name:tf.keras.optimizers.Adam(lr) for name in self.name_of_losses}
 
     def get_model(self):
         return self.model
 
+
     @tf.function
-    def train_step(self, data_maker: gr.GridUp_dataMaker):
+    def train_step(self, data_maker: NewtonData):
         X,Y=data_maker.make_XY(self.batch_size)
         with tf.GradientTape() as tape:
             Y_pred=self.model.call(X)
-            loss=tf.reduce_mean(tf.square(Y-Y_pred))
+            losses=losses_fn(X,Y,Y_pred,data_maker,self.order)
+            if self.only_one_optimizer:
+                loss=sum([loss_val for loss_val in losses.values()])
+
         tv=self.model.trainable_variables
-        grad=tape.gradient(loss,tv)
-        self.optimizer.apply_gradients(zip(grad,tv))
+        if self.only_one_optimizer:
+            grad=tape.gradient(loss,tv)
+            self.optimizer.apply_gradients(zip(grad,tv))
+        else:
+            for key in self.name_of_losses:
+                grad=tape.gradient(losses[key],tv)
+                self.optimizers[key].apply_gradients(zip(grad,tv))
         return loss
 
 
@@ -307,16 +327,16 @@ class SimpleAgent(gr.GridUp_agent):
 def test():
     ku2 = lambda u: u ** 4 + 1.0  # non linéarité
     #kpu2 = lambda u: 4.0 * u * u * u
-    newtonData = NewtonData(a=0.0, b=1.0, N=200,BC="neumann",kind="fourier",k=ku2,dtype=tf.float64)
+    newtonData = NewtonData(a=0.0, b=1.0, N=200,BC="dirichlet",kind="fourier",k=ku2,dtype=tf.float64)
 
     #premier appel
     nb_data=1500
 
-    newtonData.generate_XY(nb_data)
+    newtonData.make_XY(nb_data)
 
     #second appel
     ti0=time.time()
-    X_train,Y_train=newtonData.generate_XY(nb_data)
+    X_train,Y_train=newtonData.make_XY(nb_data)
     duration=time.time()-ti0
     print(f"duration={duration} for nb_data={nb_data} with nb points={newtonData.mesh.N}")
 
@@ -327,51 +347,9 @@ def test():
     plt.show()
 
 
-def test_generate_fourier():
-
-    def one():
-        nb_data=1
-
-        nb_fourier=6
-        dtype=tf.float32
-
-        n = tf.range(1,nb_fourier+1,dtype=dtype)[:,None,None]
-
-        pp("n",n)
-
-        an = tf.random.uniform(minval=-1,maxval=1,shape=[nb_fourier,nb_data,1],dtype=dtype)
-        pp("an",an)
-        an/=n #pour que les hautes fréquences soient moins présentes
-        pp("an",an)
-
-        mesh=Mesh(200,0,1,dtype)
-
-        nu = 2 * np.pi / mesh.L * n
-
-        a0 = tf.random.uniform(minval=-1,maxval=1,shape=[1,nb_data,1],dtype=dtype)
-
-        t=mesh.m[None,None,:]
-        res= a0 + an*tf.sin(t* nu)
-        res=tf.reduce_sum(res,axis=0)
-        return tf.reduce_sum(res)
-
-    OK=True
-    while OK:
-        res=one().numpy()
-        if np.isnan(res):
-            break
-
-
-
-
-
-
-
-
 
 if __name__=="__main__":
-    test_generate_fourier()
-    #test()
+    test()
 
 
 
