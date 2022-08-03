@@ -348,7 +348,7 @@ class DataCreator_num(GridUp_dataMaker):
         Y=tf.sin(x*self.nu)
         return X,Y
 
-    def score(self, model) -> tuple or float:
+    def score(self, model) -> dict:
         X,Y=self.make_XY(1000)
         Y_pred=model(X)
         return {

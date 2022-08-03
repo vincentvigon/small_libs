@@ -33,12 +33,10 @@ class Mesh:
 class NewtonData(gr.GridUp_dataMaker):
 
 
-
-    def score(self, model) -> dict or float:
+    def score(self, model) -> dict:
         X,Y=self.make_XY(1024)
         Y_pred=model(X)
-        residues=self.G2(X,Y_pred)
-        return {"residue/N^2":tf.reduce_mean(tf.abs(residues)/self.mesh.N**2)}
+        return self.losses_fn(X,Y,Y_pred,["U","D","diffusion","residues"])
 
     def plot_prediction(self, ax, model: tf.keras.Model) -> None:
         X,Y=self.make_XY(1)
