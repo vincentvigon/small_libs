@@ -243,21 +243,21 @@ class NewtonData(gr.GridUp_dataMaker):
             Dm_pred, Dp_pred = self.first_order_derivative(U_pred)
 
         if "diffusion" in keys or "residues" in keys:
-            diff = self.diffusion(Dm, Dp)
-            diff_pred = self.diffusion(Dm_pred, Dp_pred)
+            diffusion = self.diffusion(Dm, Dp)
+            diffusion_pred = self.diffusion(Dm_pred, Dp_pred)
 
         if "residues" in keys:
             f = X[:, :, 0]*self.normalisation_for_f
             reac_pred = alpha * U_pred
-            residues_pred = diff_pred + reac_pred - f
+            residues_pred = diffusion_pred + reac_pred - f
 
         if "U" in keys:
-            diff=U - U_pred
-            result["U"] = mse(diff)+mse(alpha*diff)
+            diff_pond=(U - U_pred)*(alpha+1) #pour appuyer là où c'est important
+            result["U"] = mse(diff_pond)
         if "D" in keys:
             result["D"] = (mse(Dm - Dm_pred) + mse(Dp - Dp_pred))/self.mesh.N
         if "diffusion" in keys:
-            result["diffusion"] = mse(diff - diff_pred)/self.mesh.N**2
+            result["diffusion"] = mse(diffusion - diffusion_pred)/self.mesh.N**2
         if "residues" in keys:
             result["residues"] = mse(residues_pred)/self.mesh.N**2
 
