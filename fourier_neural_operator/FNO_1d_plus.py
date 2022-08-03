@@ -178,10 +178,23 @@ class SpectralConv1d_plus(tf.keras.layers.Layer):
         return x
 
 
-
+print("toto")
 class FNO1d_plus(tf.keras.Model):
+
     def __init__(self, modes:int, width:int,out_channels:int,nb_layer=4,first_channel_unchanged=False,freq_mix_size=0,pad_prop=0.1,pad_kind="zero_padding",verbose=False):
+        """
+        @param modes: number of fourier coef keept
+        @param width:
+        @param out_channels:
+        @param nb_layer:
+        @param first_channel_unchanged:
+        @param freq_mix_size:
+        @param pad_prop:
+        @param pad_kind:
+        @param verbose:
+        """
         super().__init__()
+
 
         self.modes = modes
         self.width = width
@@ -195,6 +208,7 @@ class FNO1d_plus(tf.keras.Model):
 
         if verbose:
             print(f"modèle FNO1d crée avec comme hyperparamètre: modes:{modes}, width:{width},nb layers:{nb_layer}, pad_prop:{pad_prop} ")
+
 
         self.fc0 = tf.keras.layers.Dense(self.width)
 
@@ -215,6 +229,7 @@ class FNO1d_plus(tf.keras.Model):
 
     @tf.function
     def call(self, A):
+
         pad=int(A.shape[1]*self.pad_prop)
 
         if self.pad_kind is None or self.pad_kind == "no_padding":
