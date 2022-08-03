@@ -36,7 +36,7 @@ class NewtonData(gr.GridUp_dataMaker):
     def score(self, model) -> dict:
         X,Y=self.make_XY(1024)
         Y_pred=model(X)
-        return self.losses_fn(X,Y,Y_pred,["U","D","diffusion","residues"])
+        return self.losses_fn(X,Y,Y_pred,["U","D","diffusion","residues"],coef_for_derivative=1.)
 
     def plot_prediction(self, ax, model: tf.keras.Model) -> None:
         X,Y=self.make_XY(1)
@@ -230,7 +230,7 @@ class NewtonData(gr.GridUp_dataMaker):
 
 
     # noinspection PyUnboundLocalVariable
-    def losses_fn(self, X, Y, Y_pred, keys):
+    def losses_fn(self, X, Y, Y_pred, keys,coef_for_derivative):
         U = Y[:, :, 0]
         U_pred = Y_pred[:, :, 0]
         alpha = X[:, :, 1]
@@ -253,19 +253,17 @@ class NewtonData(gr.GridUp_dataMaker):
             diff_pond=(U - U_pred)*(alpha+1) #pour appuyer là où c'est important
             result["U"] = mse(diff_pond)
         if "D" in keys:
-            result["D"] = (mse(Dm - Dm_pred) + mse(Dp - Dp_pred))/self.mesh.N
+            result["D"] = (mse(Dm - Dm_pred) + mse(Dp - Dp_pred))*coef_for_derivative
         if "diffusion" in keys:
-            result["diffusion"] = mse(diffusion - diffusion_pred)/self.mesh.N**2
+            result["diffusion"] = mse(diffusion - diffusion_pred)*coef_for_derivative**2
         if "residues" in keys:
-            result["residues"] = mse(residues_pred)/self.mesh.N**2
+            result["residues"] = mse(residues_pred)*coef_for_derivative**2
 
         return result
 
 
 def mse(a):
     return tf.reduce_mean(tf.square(a))
-
-
 
 
 
@@ -296,10 +294,8 @@ def test_losses():
     print(Dm)
     print(Dp)
 
-    losses=data.losses_fn(X,Y,Y_pred,name_of_losses)
+    losses=data.losses_fn(X,Y,Y_pred,name_of_losses,coef_for_derivative=0.01)
     print("losses",losses)
-
-
 
 
 
@@ -343,7 +339,7 @@ class AgentNewton(gr.GridUp_agent):
         X,Y=data_maker.make_XY(self.batch_size)
         with tf.GradientTape(persistent=True) as tape:
             Y_pred=self.model.call(X)
-            losses=data_maker.losses_fn(X,Y,Y_pred,self.name_of_losses)
+            losses=data_maker.losses_fn(X,Y,Y_pred,self.name_of_losses,coef_for_derivative=0.01)
             loss=sum([loss_val for loss_val in losses.values()])
 
         tv=self.model.trainable_variables
