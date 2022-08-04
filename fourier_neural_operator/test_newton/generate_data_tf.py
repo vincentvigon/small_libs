@@ -23,6 +23,7 @@ class Mesh:
 
 class NewtonData(gr.GridUp_dataMaker):
 
+    #for gridup
     def score(self, agent:'AgentNewton') -> dict:
         batch_size=1024
         X,Y=self.make_XY(batch_size)
@@ -37,8 +38,7 @@ class NewtonData(gr.GridUp_dataMaker):
 
         return self.losses_fn(X,Y,Y_pred,["U","D","diffusion","residues"],coef_for_derivative=1.)
 
-
-
+    #for gridup
     def plot_prediction(self, ax, agent:'AgentNewton',custom_arg=None) -> None:
         nb=10
         tf.random.set_seed(123)
@@ -56,6 +56,32 @@ class NewtonData(gr.GridUp_dataMaker):
             ax.plot(residues[i], label="residues true")
             ax.plot(residues_pred[i], label="residues pred")
 
+    # for gridup
+    @tf.function
+    def make_XY(self, batch_size):
+        if self.verbose:
+            print("traçage de la fonction generate_XY")
+        """"""
+        """
+        On triche: on génére 
+          u,alpha
+        On en déduit le second membre
+          f 
+        qui permet d'avoir un résidu proche de zéro
+
+        Mais le réseau de neurone devrai retrouver: 
+          Y=[u]
+        à partir de
+          X=[f,alpha]
+
+
+        """
+        alpha = self.generate_alpha(batch_size)
+        U = self.generate_alpha(batch_size)
+        f_nor = self.elliptic(U, alpha) / self.normalisation_for_f
+        X = tf.stack([f_nor, alpha], axis=2)
+        Y = U[:, :, None]
+        return X, Y
 
     def __init__(self,
             a, #deb de l'intervalle
@@ -205,32 +231,6 @@ class NewtonData(gr.GridUp_dataMaker):
         else:
             raise Exception(f"kind must be 'gauss' or 'fourier'. Found:{self.kind}")
 
-    @tf.function
-    def make_XY(self,batch_size):
-        if self.verbose:
-            print("traçage de la fonction generate_XY")
-        """"""
-        """
-        On triche: on génére 
-          u,alpha
-        On en déduit le second membre
-          f 
-        qui permet d'avoir un résidu proche de zéro
-        
-        Mais le réseau de neurone devrai retrouver: 
-          Y=[u]
-        à partir de
-          X=[f,alpha]
-        
-        
-        """
-        alpha = self.generate_alpha(batch_size)
-        U = self.generate_alpha(batch_size)
-        f_nor = self.elliptic(U,alpha)/self.normalisation_for_f
-        X = tf.stack([f_nor,alpha],axis=2)
-        Y = U[:,:,None]
-        return X,Y
-
 
     def plot_data(self,X,Y):
         f_nor=X[:, :, 0]
@@ -292,12 +292,24 @@ def mse(a):
 
 class AgentNewton(gr.GridUp_agent):
 
-
+    #for gridup (for early stopping)
     def get_weights(self) -> List[tf.Tensor]:
         return self.model.get_weights()
 
+    #for gridup (for early stopping)
     def set_weights(self, weights: List[tf.Tensor]) -> None:
         self.model.set_weights(weights)
+
+    #for gridup (for early stopping)
+    def call_model(self,X):
+        X=self.augment(X)
+        return self.model.call(X)
+
+    #for gridup (for early stopping)
+    def train_step(self, data_maker: NewtonData):
+        loss, _=self.train_step_with_details(data_maker)
+        return loss
+
 
     def __init__(self,
             name_of_losses,
@@ -326,9 +338,6 @@ class AgentNewton(gr.GridUp_agent):
         else:
             self.optimizers={name:tf.keras.optimizers.Adam(lr) for name in self.name_of_losses}
 
-    def call_model(self,X):
-        X=self.augment(X)
-        return self.model.call(X)
 
     def augment(self,X):
         if self.augmentation_level==0:
@@ -372,10 +381,6 @@ class AgentNewton(gr.GridUp_agent):
 
         del tape
         return loss,losses
-
-    def train_step(self, data_maker: NewtonData):
-        loss, _=self.train_step_with_details(data_maker)
-        return loss
 
 
 
