@@ -24,7 +24,7 @@ class Mesh:
 class NewtonData(gr.GridUp_dataMaker):
 
     def score(self, agent:'AgentNewton') -> dict:
-        batch_size=32
+        batch_size=1024
         X,Y=self.make_XY(batch_size)
         Y_pred=agent.call_model(X)
         # todo
