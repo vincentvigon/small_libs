@@ -83,8 +83,7 @@ class Newton:  # à modifier /creation des jeux de données
 
             diff = - (Kp * (Up - U) - Km * (U - Um)) / h ** 2
             diff[0] = - (Kp[0] * (Up[0] - U[0]) + self.ubc) / h ** 2  # - Km * (U - Um) = uL neumann on left boundary
-            diff[-1] = - (-self.ubc - Km[-1] * (
-                        U[-1] - Um[-1])) / h ** 2  # - Kp * (Up - U) = uR neumann on right boundary
+            diff[-1] = - (-self.ubc - Km[-1] * (U[-1] - Um[-1])) / h ** 2  # - Kp * (Up - U) = uR neumann on right boundary
         else:
             raise Exception('Not yet implemented.')
 

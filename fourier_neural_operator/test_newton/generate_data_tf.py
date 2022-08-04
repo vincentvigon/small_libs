@@ -24,9 +24,20 @@ class Mesh:
 class NewtonData(gr.GridUp_dataMaker):
 
     def score(self, agent:'AgentNewton') -> dict:
-        X,Y=self.make_XY(1024)
+        batch_size=32
+        X,Y=self.make_XY(batch_size)
         Y_pred=agent.call_model(X)
+        # todo
+        # for i in range(batch_size):
+        #     U_pred=Y_pred[i,:,0]
+        #     f=X[i,:,0]
+        #     alpha=X[i,:,1]
+        #     G=self.get_G_for_scipy(f,alpha)
+        #     scipy.optimize(G,initial=U_pred)
+
         return self.losses_fn(X,Y,Y_pred,["U","D","diffusion","residues"],coef_for_derivative=1.)
+
+
 
     def plot_prediction(self, ax, agent:'AgentNewton',custom_arg=None) -> None:
         nb=10
@@ -106,6 +117,13 @@ class NewtonData(gr.GridUp_dataMaker):
         elif self.BC == "periodic":
             Um = tf.concat([U[:, -1:], Um], axis=1)
             Up = tf.concat([Up, U[:, :1]], axis=1)
+
+        elif self.BC == "neumann":
+            pass
+            # DerLeft=(U[:,1]-U[:,0])/self.mesh.h
+            # DerRight=(U[:,-1]-U[:,-2])/self.mesh.h
+            # Um = tf.concat([DerLeft, Um], axis=1)
+            # Up = tf.concat([Up, DerRight], axis=1)
         else:
             raise Exception(f"must be 'dirichlet' or 'periodic': 'neumann' will come soon, found:{self.BC}")
 
@@ -118,8 +136,9 @@ class NewtonData(gr.GridUp_dataMaker):
 
         return Dm,Dp
 
-    def get_G_for_scipy(self,f,alpha):
-        return lambda U:self.G(U,f,alpha)
+    def get_G_for_scipy(self,f_i,alpha_i):
+        #scipy veut une fonction non batchée
+        return lambda U_i:self.G(U_i,f_i[None, :],alpha_i[None, :])[0, :]
 
     def G(self, U,f,alpha):
         """
@@ -138,6 +157,11 @@ class NewtonData(gr.GridUp_dataMaker):
         return self.G(U,f,alpha)
 
     def generate_fourier(self,nb_data):
+        """
+        Données périodiques
+        @param nb_data:
+        @return:
+        """
 
         nb_fourier=6
         n = tf.range(1,nb_fourier+1,dtype=self.dtype)[:,None,None]
@@ -180,7 +204,6 @@ class NewtonData(gr.GridUp_dataMaker):
             return self.generate_fourier(nb_data)
         else:
             raise Exception(f"kind must be 'gauss' or 'fourier'. Found:{self.kind}")
-
 
     @tf.function
     def make_XY(self,batch_size):
@@ -267,8 +290,6 @@ def mse(a):
     return tf.reduce_mean(tf.square(a))
 
 
-
-
 class AgentNewton(gr.GridUp_agent):
 
 
@@ -277,7 +298,6 @@ class AgentNewton(gr.GridUp_agent):
 
     def set_weights(self, weights: List[tf.Tensor]) -> None:
         self.model.set_weights(weights)
-
 
     def __init__(self,
             name_of_losses,
@@ -306,26 +326,27 @@ class AgentNewton(gr.GridUp_agent):
         else:
             self.optimizers={name:tf.keras.optimizers.Adam(lr) for name in self.name_of_losses}
 
-
     def call_model(self,X):
         X=self.augment(X)
         return self.model.call(X)
-
 
     def augment(self,X):
         if self.augmentation_level==0:
             return X
         elif self.augmentation_level==1:
             f_nor=X[:,:,0]
+            nb_x=f_nor.shape[1]
+
             alpha=X[:,:,1]
-            ff=tf.cumsum(f_nor,axis=1)/100
+            ff=tf.cumsum(f_nor,axis=1)/nb_x
             return tf.stack([f_nor,alpha,ff],axis=2)
 
         elif self.augmentation_level==2:
             f_nor=X[:,:,0]
+            nb_x=f_nor.shape[1]
             alpha=X[:,:,1]
-            ff=tf.cumsum(f_nor,axis=1)/100
-            fff = tf.cumsum(ff, axis=1) / 100
+            ff=tf.cumsum(f_nor,axis=1)/nb_x
+            fff = tf.cumsum(ff, axis=1) / nb_x
             return tf.stack([f_nor,alpha,ff,fff],axis=2)
         else:
             raise Exception(f"augmentation level must be in [0,1,2], found:{self.augmentation_level}")

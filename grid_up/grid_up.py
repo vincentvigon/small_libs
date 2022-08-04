@@ -1,5 +1,8 @@
 
 import time
+
+from info_helper.info_helper import print_signature
+
 pp=print
 import numpy as np
 import tensorflow as tf
@@ -337,9 +340,9 @@ class DataCreator_num(GridUp_dataMaker):
     def plot_prediction(self,ax,agent:'SimpleAgent',custom_arg=None):
         X,Y=self.make_XY(500)
         Y_pred=agent.call_model(X)
-        if custom_arg["plot_true"]:
+        if custom_arg.get("plot_true",False):
             ax.plot(X[:,0],Y[:,0],".",label="true")
-        if custom_arg["plot_pred"]:
+        if custom_arg.get("plot_pred",False):
             ax.plot(X[:,0],Y_pred[:,0],".",label="pred")
 
     def make_XY(self, batch_size) -> tuple:
@@ -406,8 +409,8 @@ def test_numeric_cases():
         verbose=True
     )
 
-    res=testor.watch_param("batch_size")
-    print(res)
+    testor.watch_param("batch_size")
+
     testor.plot_last_result(True)
     testor.plot_last_result(False)
     fig,axs=testor.plot_prediction({"plot_true":True,"plot_pred":True})
