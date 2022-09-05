@@ -12,22 +12,25 @@ pp=print
 
 class Derivator_fft:
 
-    def __init__(self, U_example,  axes, interval_lenghts, formula, pad_prop=0.1, suppress_padding_on_output=True,graph_acceleration=False,verbose=False):
-
+    def __init__(self,  axes, interval_lenghts, formula, pad_prop=0.1, suppress_padding_on_output=True,graph_acceleration=False,verbose=False):
         self.axes=axes
+        self.interval_lenghts=interval_lenghts
         self.formula=formula
+        self.pad_prop=pad_prop
+        self.suppress_padding_on_output=suppress_padding_on_output
         self.graph_acceleration=graph_acceleration
+        self.verbose=verbose
+
+        self.init_was_made=False
+
+
+    def init(self, U_example):
 
         input_shape=U_example.shape
         U_example=tf.constant(U_example) # au cas où les tenseurs sera de type numpy
         self.initial_dtype=U_example.dtype
 
-
-        self.suppress_padding_on_output = suppress_padding_on_output
-
-
-        sizes = [input_shape[i] for i in axes]
-
+        sizes = [input_shape[i] for i in self.axes]
 
         if self.initial_dtype==tf.float32 or self.initial_dtype==tf.complex64:
             is_32bit=True
@@ -48,14 +51,14 @@ class Derivator_fft:
         sizes_with_pad = []
         interval_length_with_pad = []
 
-        pads = [int(size * pad_prop) for size in sizes]
+        pads = [int(size * self.pad_prop) for size in sizes]
 
 
-        for i in range(len(axes)):
+        for i in range(len(self.axes)):
             if pads[i] >= sizes[i]:
                 pads[i] = sizes[i] - 1
             sizes_with_pad.append(sizes[i] + 2 * pads[i])
-            interval_length_with_pad.append(interval_lenghts[i] * (1 + 2 * pad_prop))
+            interval_length_with_pad.append(self.interval_lenghts[i] * (1 + 2 * self.pad_prop))
 
         self.pads = pads
 
@@ -64,7 +67,7 @@ class Derivator_fft:
         """
         Calcul des vecteurs k, qui, une fois multiplié à la transformée de fourier, produirons la dérivation 
         """
-        for i in range(len(axes)):
+        for i in range(len(self.axes)):
             k_max = sizes_with_pad[i] // 2
             if sizes_with_pad[i] % 2 == 0:
                 k = tf.concat([tf.range(0., k_max, dtype=self.dtype_real), tf.range(-k_max, 0., dtype=self.dtype_real)],
@@ -82,16 +85,16 @@ class Derivator_fft:
             Maintenant, il faut étaler ce vecteur dans le bon axe. Par exemple si current_axis=3
             la shape de k sera (1,1,1,size,1,1,...)
             """
-            s = [1] * axes[i]
+            s = [1] * self.axes[i]
             s += [sizes_with_pad[i]]
-            s += [1] * (len(input_shape) - axes[i]-1)
+            s += [1] * (len(input_shape) - self.axes[i]-1)
 
             k = tf.reshape(k, s)
-            if verbose:
+            if self.verbose:
                 print(i,"shape ieme tenseur:",s)
             ks.append(k)
 
-        self.freq_factor=formula(*ks)
+        self.freq_factor=self.formula(*ks)
 
         self.result_type = None
         if isinstance(self.freq_factor,dict):
@@ -107,12 +110,17 @@ class Derivator_fft:
             self.freq_factor =[self.freq_factor]
 
 
-        self.fft=Fft_nd(axes)
+        self.fft=Fft_nd(self.axes)
 
-        self.ifft=Fft_nd(axes,inverse=True)
+        self.ifft=Fft_nd(self.axes,inverse=True)
 
 
-    def D(self,U):
+    def __call__(self,U):
+
+        if self.init_was_made:
+            self.init(U)
+            self.init_was_made=True
+
         if self.graph_acceleration:
             print("traçage de la méthode de dérivation du Derivator_fft",end="")
             ti0=time.time()
@@ -212,8 +220,8 @@ def test_1d():
     F = F[None, None, :, None]
     F_x = F_x[None, None, :, None]
 
-    derivator = Derivator_fft(F, [2], [L], lambda x: x, pad_prop=0.2)
-    F_x_pred = derivator.D(F)
+    derivator = Derivator_fft( [2], [L], lambda x: x, pad_prop=0.2)
+    F_x_pred = derivator(F)
 
     fig,axs=plt.subplots(3,1,sharex="all")
     axs[0].set_title("function")
@@ -268,8 +276,8 @@ def test_precision():
             F=F[None,None,:,None]
             F_x=F_x[None,None,:,None]
 
-            derivator=Derivator_fft(F,[2],[L],lambda x:x,pad_prop)#FftDerivator1d(L,F_x.shape,axis=2,pad_prop=pad_prop)
-            F_x_pred=derivator.D(F)
+            derivator=Derivator_fft([2],[L],lambda x:x,pad_prop)#FftDerivator1d(L,F_x.shape,axis=2,pad_prop=pad_prop)
+            F_x_pred=derivator(F)
             error_1=tf.reduce_mean(tf.abs(F_x_pred-F_x))
             error_2=tf.reduce_mean(tf.square(F_x_pred-F_x))
 
@@ -321,8 +329,8 @@ def simple_test():
     U=a0*a1**2*a2
     print("U",U.shape)
 
-    derivator=Derivator_fft(U,[2,1],[T0,T1],lambda a0,a1:[a0,a1],pad_prop=0,suppress_padding_on_output=False)
-    U_a0,U_a1=derivator.D(U)
+    derivator=Derivator_fft([2,1],[T0,T1],lambda a0,a1:[a0,a1],pad_prop=0,suppress_padding_on_output=False)
+    U_a0,U_a1=derivator(U)
 
     print(U_a0.shape)
 
@@ -351,21 +359,21 @@ def test_divergence():
     F=func(a0_,a1_,a2_,a3_)
     div_F=div_func(a0_,a1_,a2_,a3_)
 
-    derivator_fft=Derivator_fft(F,[0,1,2,3],[1,1,1,1],lambda a0,a1,a2,a3:a0+a1+a2+a3,graph_acceleration=True)
+    derivator_fft=Derivator_fft([0,1,2,3],[1,1,1,1],lambda a0,a1,a2,a3:a0+a1+a2+a3,graph_acceleration=True)
 
     for i in range(4):
         ti0=time.time()
-        div_F_pred=derivator_fft.D(F)
+        div_F_pred=derivator_fft(F)
         duration=time.time()-ti0
         print(f"temps d'execution {i}:",duration)
 
 
     print("SANS TRAçAGE")
-    derivator_fft=Derivator_fft(F,[0,1,2,3],[1,1,1,1],lambda a0,a1,a2,a3:a0+a1+a2+a3,graph_acceleration=False)
+    derivator_fft=Derivator_fft([0,1,2,3],[1,1,1,1],lambda a0,a1,a2,a3:a0+a1+a2+a3,graph_acceleration=False)
 
     for i in range(4):
         ti0=time.time()
-        div_F_pred=derivator_fft.D(F)
+        div_F_pred=derivator_fft(F)
         duration=time.time()-ti0
         print(f"temps d'execution {i}:",duration)
 
@@ -399,9 +407,9 @@ def test_2d():
     for f,name in zip([fn_a0,fn_a1,fn_a0a0,fn_a0a1,fn_a1a1],["a0","a1","a0^2","a0a1","a1^2"]):
         DF[name]=f(aa0,aa1)
 
-    derivator = Derivator_fft(F, [0, 1], Ls,
+    derivator = Derivator_fft([0, 1], Ls,
         formula=lambda a0, a1: {"a0": a0, "a1": a1, "a0^2": a0 ** 2, "a1^2": a1 ** 2,"a0a1":a0*a1})
-    DF_fft=derivator.D(F)
+    DF_fft=derivator(F)
 
     extent = [0., Ls[1], 0., Ls[0]]
     fig, axs = plt.subplots(6,2, figsize=(5, 10),sharex="all")
