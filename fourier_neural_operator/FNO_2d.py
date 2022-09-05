@@ -71,13 +71,15 @@ class SpectralConv2d(tf.keras.layers.Layer):
         return A
 
 
+
 class FNO2d(tf.keras.Model):
-    def __init__(self, modes:int, width:int,pad_prop=0.05):
+    def __init__(self, modes:int, width:int,out_channels:int,pad_prop=0.05):
         super().__init__()
 
         self.modes1 = modes
         self.modes2 = modes
         self.width = width
+        self.out_channels=out_channels
 
         self.pad_prop=pad_prop #on peut mettre à zéro si les inputs et les outputs sont périodiques
 
@@ -89,7 +91,7 @@ class FNO2d(tf.keras.Model):
         self.ws=[tf.keras.layers.Conv2D(self.width,1) for _ in range(4)]
 
         self.fc1 = tf.keras.layers.Dense(128)
-        self.fc2 = tf.keras.layers.Dense(1)
+        self.fc2 = tf.keras.layers.Dense(self.out_channels)
 
 
     @tf.function

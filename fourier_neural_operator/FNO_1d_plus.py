@@ -1,13 +1,10 @@
 from paddings.paddings import pad_nd
 import time
-
 from paddings.paddings_right import pad_nd_right
-
 pp=print
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
-np.set_printoptions(linewidth=10000,precision=4)
 
 
 class SpectralConv1d_plus(tf.keras.layers.Layer):

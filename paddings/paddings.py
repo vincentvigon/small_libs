@@ -5,6 +5,39 @@ import matplotlib.pyplot as plt
 pp=print
 
 
+class Padding_kind:
+
+    def __init__(self):
+
+        self.zero_padding = "zero_padding"
+        self.dirichlet_padding = "dirichlet_padding"
+        self.neumann_padding = "neumann_padding"
+        self.smooth_padding = "smooth_padding"
+        self.periodic_padding = "periodic_padding"
+        self.smooth_periodizing_padding = "smooth_periodizing_padding"
+        self.linear_periodizing_padding = "linear_periodizing_padding"
+
+        self.key_to_func = {
+            self.zero_padding: zero_padding,
+            self.dirichlet_padding: dirichlet_padding,
+            self.neumann_padding: neumann_padding,
+            self.smooth_padding: smooth_padding,
+            self.periodic_padding: periodic_padding,
+            self.smooth_periodizing_padding: smooth_periodizing_padding,
+            self.linear_periodizing_padding: linear_periodizing_padding
+        }
+
+
+    def get_one_function(self, kind):
+        return self.key_to_func[kind]
+
+    def get_some_function(self, kinds):
+        return [self.key_to_func[kind] for kind in kinds]
+
+    def get_all_function(self):
+        return [self.key_to_func[kind] for kind in self.key_to_func.values()]
+
+
 def tend_to_zero_right(U):
     N=U.shape[-1]
     t=linspace(0.,2,N,U.dtype)
@@ -215,31 +248,22 @@ def test_pad_1d():
 
     pad_size = [60,50]
 
-    for kind in kind_dict.keys():
+    for kind in padding_kind.get_all_function():
         W_=pad_1d(W,kind,pad_size,axis=1)
         plt.plot(W_[0,:,0],label=kind)
+
 
     plt.legend(bbox_to_anchor=(0, 0.9),loc='center left')
     plt.show()
 
 
 
-kind_dict={
-    "zero_padding": zero_padding,
-    "dirichlet_padding":dirichlet_padding,
-    "neumann_padding":neumann_padding,
-    "smooth_padding": smooth_padding,
-    "periodic_padding":periodic_padding,
-    "smooth_periodizing_padding": smooth_periodizing_padding,
-    "linear_periodizing_padding":linear_periodizing_padding
-}
-
 
 def pad_1d(W,kind,pad_size,axis,preserve_positivity=False):
     try:
-        pad_func=kind_dict[kind]
+        pad_func=padding_kind.get_one_function(kind)#kind_dict[kind]
     except KeyError:
-        raise Exception(f"the kind:{kind} is not allowed. Allowed kinds are {kind_dict.keys()}")
+        raise Exception(f"the kind:{kind} is not allowed. Allowed kinds are {padding_kind.key_to_func.keys()}")
 
     dim = len(W.shape)
 
@@ -261,7 +285,7 @@ def pad_1d(W,kind,pad_size,axis,preserve_positivity=False):
 
 
 def pad_nd(W,kind,pad_sizes,axes,preserve_positivity=False):
-    assert  isinstance(kind,str), "kind must be a string in the following list:"+str(kind_dict.keys())
+    assert  isinstance(kind,str), "kind must be a string in the following list:"+str(padding_kind.key_to_func.keys())
     assert isinstance(axes,tuple) or isinstance(axes,list), "axes must be a list or a tupe"
     assert isinstance(pad_sizes,tuple) or isinstance(pad_sizes,list), "pad_sizes must be a list or a tupe"
 
@@ -271,6 +295,56 @@ def pad_nd(W,kind,pad_sizes,axes,preserve_positivity=False):
         W=pad_1d(W,kind,pad_size,axis,preserve_positivity)
 
     return W
+
+def unpad_nd(W,pad_sizes,axes):
+    for pad_size,axis in zip(pad_sizes,axes):
+
+        if isinstance(pad_size, tuple) or isinstance(pad_size, list):
+            pad_left = pad_size[0]
+            pad_right = pad_size[1]
+        else:
+            pad_left = pad_size
+            pad_right = pad_size
+
+        size_before_unpad=W.shape[axis]
+        size_after=size_before_unpad-pad_left-pad_right
+
+        W=slice_at_given_axis(W,pad_left,size_after,axis)
+
+    return W
+
+
+
+def slice_at_given_axis(W,begin,size,axis):
+    beg=[0 for _ in W.shape]
+    sizes=[i for i in W.shape]
+    beg[axis]=begin%W.shape[axis]
+    sizes[axis]=size
+    res=tf.slice(W,beg,sizes)
+    return res
+
+
+def test_slice_at_given_axis():
+    U=tf.random.uniform(shape=[5,6,7,8])
+    U_slice=slice_at_given_axis(U,1,3,axis=1)
+    print("before",U.shape)
+    print("after",U_slice.shape)
+
+
+
+def test_pad_unpad():
+    U=tf.random.uniform(shape=[5,6,7,8,9])
+
+    pad_sizess=[[1,2,3],[(1,2),(2,1),(3,0)],[(1,2),3,(4,4)]]
+    axess = [[0, 2, 4],[1,2,4],[0,1,4]]
+
+    for pad_sizes,axes in zip(pad_sizess,axess):
+        U_pad=pad_nd(U,"zero_padding",pad_sizes,axes)
+        U_unpad=unpad_nd(U_pad,pad_sizes,axes)
+        print("shape are the same:",U.shape,U_unpad.shape)
+        assert U.shape==U_unpad.shape
+        #tensord are the same
+        assert tf.reduce_mean(tf.abs(U-U_unpad))<1e-6
 
 
 def test_pad_nd():
@@ -282,7 +356,7 @@ def test_pad_nd():
     xx,yy=tf.meshgrid(x,y)
     z=tf.sin(10*xx)+yy
 
-    keys=kind_dict.keys()
+    keys=padding_kind.key_to_func.keys()
     nb=len(keys)
     def one(reverse):
         fig,axs=plt.subplots(nb,1,figsize=(5,3*nb))
@@ -298,8 +372,21 @@ def test_pad_nd():
 
     plt.show()
 
+
+
+
+padding_kind=Padding_kind()
+
+
+
+
 if __name__=="__main__":
     #test_tend_to_value()
-    test_pad_1d()
+    #test_pad_1d()
     #test_periodizing()
     test_pad_nd()
+
+    #test_slice_at_given_axis()
+
+
+    test_pad_unpad()

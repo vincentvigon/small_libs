@@ -73,8 +73,6 @@ class NewtonData(gr.GridUp_dataMaker):
           Y=[u]
         à partir de
           X=[f,alpha]
-
-
         """
         alpha = self.generate_alpha(batch_size)
         U = self.generate_alpha(batch_size)
@@ -117,7 +115,6 @@ class NewtonData(gr.GridUp_dataMaker):
         Dm, Dp=self.first_order_derivative(U)
         diffusion = self.diffusion(Dm,Dp)
         return diffusion+reac
-
 
     def diffusion(self,Dm,Dp):
         return (Dm - Dp) / self.mesh.h
@@ -309,7 +306,6 @@ class AgentNewton(gr.GridUp_agent):
     def train_step(self, data_maker: NewtonData):
         loss, _=self.train_step_with_details(data_maker)
         return loss
-
 
     def __init__(self,
             name_of_losses,
