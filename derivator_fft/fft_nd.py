@@ -94,7 +94,6 @@ def fft_nd(W,axes):
 def ifft_nd(W,axes):
     return Fft_nd(axes,inverse=True)(W)
 
-
 class Fft_nd:
     def __init__(self,axes,axes_grouping=None,inverse=False):
         self.axes=axes
@@ -151,8 +150,6 @@ class Fft_nd:
 
         W=tf.transpose(W,self.comme_back)
         return W
-
-
 
 def test_fft_nd():
     #fft_nd=Fft_nd([1,2,3,4,5,6],[1,2,3])
