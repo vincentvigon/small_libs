@@ -117,7 +117,7 @@ class Derivator_fft:
 
     def __call__(self,U):
 
-        if self.init_was_made:
+        if not self.init_was_made:
             self.init(U)
             self.init_was_made=True
 
@@ -431,11 +431,11 @@ def test_2d():
 
 
 if __name__=="__main__":
-    #test_1d()
+    test_1d()
     #test_2d()
     #simple_test()
     #test_precision()
-    test_divergence()
+    #test_divergence()
 
 
 
