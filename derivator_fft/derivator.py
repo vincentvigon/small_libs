@@ -109,9 +109,7 @@ class Derivator_fft:
             self.result_type = "scalar"
             self.freq_factor =[self.freq_factor]
 
-
         self.fft=Fft_nd(self.axes)
-
         self.ifft=Fft_nd(self.axes,inverse=True)
 
 

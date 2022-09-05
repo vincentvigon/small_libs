@@ -1,7 +1,7 @@
 import sys
 "ajouter un chemin au début de la liste"
 
-#sys.path.insert(0, "small_libs")
+sys.path.insert(0, "small_libs")
 
 print("importation de small_libs, ajout de small_libs dans votre PYTHONPATH")
 print("small_libs importation")
