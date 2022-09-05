@@ -28,7 +28,6 @@ def create_permut(axes,dim):
         res[j]=i
     return res
 
-
 def create_several_permut(axess,dim):
     res=[]
     compo_inv=np.arange(dim)
@@ -62,7 +61,6 @@ def do_permut(liste,permut1):
         res.append(liste[j])
     return res
 
-
 def test_create_permut():
     permut=create_permut([0,2],4)
     print("permut",permut)
@@ -93,6 +91,8 @@ def fft_nd(W,axes):
     return Fft_nd(axes)(W)
 def ifft_nd(W,axes):
     return Fft_nd(axes,inverse=True)(W)
+
+
 
 class Fft_nd:
     def __init__(self,axes,axes_grouping=None,inverse=False):
@@ -151,6 +151,13 @@ class Fft_nd:
         W=tf.transpose(W,self.comme_back)
         return W
 
+
+
+
+"""
+Test automatiques
+"""
+
 def test_fft_nd():
     #fft_nd=Fft_nd([1,2,3,4,5,6],[1,2,3])
 
@@ -170,37 +177,12 @@ def test_fft_nd():
         print(mse.numpy())
         assert tf.abs(mse)<1e-12
 
-def test_fft_perf():
-    W = tf.random.uniform([20,10,20, 30, 40])
-    W = tf.complex(W, W)
-
-    def one(axes_grouping):
-        ti0=time.time()
-        F=Fft_nd([1,2,3,4],axes_grouping)(W)
-        duration=time.time()-ti0
-        print("axes_grouping",axes_grouping,"duration:",duration)
-        return F
-
-    Fs=[]
-    for grouping in [(1,1,1,1),(2,2),(1,2,1),(3,1),(1,1,2)]:
-        F=one(axes_grouping=grouping)
-        Fs.append(F)
-
-
-    def mse_fn(A):
-        return tf.reduce_mean(tf.square(tf.abs(A)))
-
-    F0=Fs[0]
-    for F in Fs[1:]:
-        mse=mse_fn(F-F0)
-        print(mse)
-        assert mse<1e-6
-
 
 
 if __name__=="__main__":
     #test_create_permut()
     #test_double_permut()
     #test_create_several_permut()
-    #test_fft_nd()
-    test_fft_perf()
+    test_fft_nd()
+
+
