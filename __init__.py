@@ -1,3 +1,7 @@
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import numpy as np
+
 import sys
 "ajouter un chemin au début de la liste"
 
